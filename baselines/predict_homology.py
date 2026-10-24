@@ -9,7 +9,7 @@ from keras.layers import Input, TimeDistributed, Masking, Dense, Dot, Lambda, Ba
 from keras.models import Model
 from network.embeddings import MaskedBatchNormalization
 import tensorflow as tf
-from keras.engine.base_layer import Layer
+from keras import Layer
 from utilities.paths import homology_folder,predictions_folder,path_to_multiprot,library_folder
 import argparse
 import predict_bindingsites

@@ -5,7 +5,7 @@ import numpy as np
 import keras.regularizers
 from . import neighborhoods, attention, embeddings, utils
 from functools import partial
-import keras.backend as K
+from network import keras_compat as K
 import tensorflow as tf
 from utilities import wrappers,io_utils
 from preprocessing import PDB_processing

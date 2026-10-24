@@ -1,5 +1,5 @@
-from keras.engine.base_layer import Layer
-from keras import backend as K
+from keras import Layer
+from network import keras_compat as K
 from keras.constraints import NonNeg
 from keras.initializers import Zeros,TruncatedNormal,Ones,RandomUniform
 import numpy as np

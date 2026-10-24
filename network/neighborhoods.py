@@ -1,5 +1,6 @@
-from keras.engine.base_layer import Layer
-from keras import backend as K
+from keras import Layer
+from network import keras_compat as K
+from keras import ops
 import tensorflow as tf
 import numpy as np
 from keras.layers import Input, Masking, Dense
@@ -99,7 +100,7 @@ class FrameBuilder(Layer):
         else:
             num_vectors = 4
         if mask not in [None, [None, None]]:
-            return tf.tile(tf.expand_dims(mask[1], axis=-1),[1,1,num_vectors])
+            return ops.tile(ops.expand_dims(mask[1], axis=-1),[1,1,num_vectors])
         else:
             return mask
 
@@ -391,9 +392,9 @@ class LocalNeighborhood(Layer):
                 first_mask = first_mask[:, :, 1]
 
             if self.nrotations>1:
-                return [tf.expand_dims(tf.expand_dims(first_mask,axis=-1),axis=-1) ]* (1+ self.nattributes)
+                return [ops.expand_dims(ops.expand_dims(first_mask,axis=-1),axis=-1) ]* (1+ self.nattributes)
             else:
-                return [tf.expand_dims(first_mask,axis=-1) ] * (1+self.nattributes)
+                return [ops.expand_dims(first_mask,axis=-1) ] * (1+self.nattributes)
         else:
             return mask
 
@@ -770,7 +771,7 @@ if __name__ == '__main__':
 
 
     def keras_frames(Lmax=20):
-        from keras.engine.base_layer import Layer
+        from keras import Layer
         from keras import backend as K
         import tensorflow as tf
         import numpy as np

@@ -9,6 +9,25 @@ def slice_list_of_arrays(arrays, mask):
         return arrays[mask]
 
 
+def to_object_array(arrays):
+    """Build a 1D object array of (possibly ragged) arrays.
+
+    np.array(list_of_arrays, dtype=object) broadcasts into a full object array
+    when the elements happen to have matching shapes, which loses their dtype.
+    """
+    out = np.empty(len(arrays), dtype=object)
+    for k, array in enumerate(arrays):
+        out[k] = array
+    return out
+
+
+def stack_or_object_array(arrays):
+    try:
+        return np.array(arrays)
+    except ValueError:  # ragged shapes
+        return to_object_array(arrays)
+
+
 def stack_list_of_arrays(arrays,padded=True):
     if isinstance(arrays[0], tuple) | isinstance(arrays[0], list):
         return [stack_list_of_arrays([array[k] for array in arrays],padded=padded) for k in range(len(arrays[0])) ]
@@ -16,7 +35,7 @@ def stack_list_of_arrays(arrays,padded=True):
         if padded:
             return np.concatenate(list(arrays), axis=0)
         else:
-            return np.array(list(arrays), dtype=np.object)
+            return to_object_array(list(arrays))
 
 
 
@@ -26,7 +45,7 @@ def split_list_of_arrays(arrays, segment_lengths):
     if isinstance(arrays, tuple) | isinstance(arrays, list):
         return [split_list_of_arrays(array, segment_lengths) for array in arrays]
     else:
-        return np.array([arrays[split_indexes[i]:split_indexes[i + 1]] for i in range(nsplits)])
+        return stack_or_object_array([arrays[split_indexes[i]:split_indexes[i + 1]] for i in range(nsplits)])
 
 
 def truncate_list_of_arrays(arrays, Ls):
@@ -34,9 +53,9 @@ def truncate_list_of_arrays(arrays, Ls):
         return [truncate_list_of_arrays(array, Ls) for array in arrays]
     else:
         if isinstance(Ls, list) | isinstance(Ls, np.ndarray):
-            return np.array([array[:L] for array, L in zip(arrays, Ls)])
+            return stack_or_object_array([array[:L] for array, L in zip(arrays, Ls)])
         else:
-            return np.array([array[:Ls] for array in arrays])
+            return stack_or_object_array([array[:Ls] for array in arrays])
 
 def load_model(location, Lmax=None,load_weights=True):
     pickle_location = location + '.data'
@@ -363,10 +382,10 @@ class grouped_Predictor_wrapper(Predictor_wrapper):
         if multi_valued:
             nexamples = sum([len(group) for group in groups[0]])
             noutputs = len(grouped_outputs)
-            outputs = [ np.array([None for _ in range(nexamples)],dtype=np.object) for _ in range(noutputs) ]
+            outputs = [ np.empty(nexamples,dtype=object) for _ in range(noutputs) ]
         else:
             nexamples = sum([len(group) for group in groups])
-            outputs = np.array([None for _ in range(nexamples)],dtype=np.object)
+            outputs = np.empty(nexamples,dtype=object)
             noutputs = 1
         if multi_valued:
             for n in range(noutputs):
@@ -439,13 +458,13 @@ class grouped_Predictor_wrapper(Predictor_wrapper):
         if self.verbose:
             print('prediction done!')
         if (not return_all) & self.multi_outputs:
-            return np.array([output_[:,1] for output_ in outputs[0]])
+            return stack_or_object_array([output_[:,1] for output_ in outputs[0]])
         elif (not return_all) & ~self.multi_outputs:
-            return np.array([output_[:,1] for output_ in outputs])
+            return stack_or_object_array([output_[:,1] for output_ in outputs])
         elif return_all & self.multi_outputs:
-            return [np.array(outputs_) for outputs_ in outputs]
+            return [stack_or_object_array(outputs_) for outputs_ in outputs]
         else:
-            return np.array([output_ for output_ in outputs])
+            return stack_or_object_array([output_ for output_ in outputs])
 
 
     def fit(self, inputs, outputs, **kwargs):
