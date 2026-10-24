@@ -1,7 +1,11 @@
 # List of paths to folders and binaries. All folder paths should finish with slash (/)
 
 # Paths required for prediction.
-library_folder = '' # Where the Github Repo is located.
+import os
+
+# Where the Github Repo is located. Resolved from this file so that the paths
+# below work when ScanNet is installed and called from another directory.
+library_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/'
 structures_folder = library_folder + 'PDB/' # Where pdb/mmCIF structures files are stored.
 predictions_folder = library_folder + 'predictions/' # Output folder.
 model_folder = library_folder + 'models/' # Where the networks as stored as pairs of files (.h5,.data).

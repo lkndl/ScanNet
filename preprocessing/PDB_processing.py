@@ -135,6 +135,14 @@ def get_PDB_indices(chain_obj,return_model=False,return_chain=False):
     return list_indices
 
 
+def get_PDB_icodes(chain_obj):
+    list_icodes = []
+    for residue in Selection.unfold_entities(chain_obj, 'R'):
+        if is_residue(residue):
+            list_icodes.append(residue.get_id()[2])
+    return np.array(list_icodes)
+
+
 #%% Functions for finding interfaces residues and other distance-related features.
 
 @njit(parallel=False)

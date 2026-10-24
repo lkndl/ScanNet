@@ -1,5 +1,5 @@
 import os
-cores = 5  # Set number of CPUs to use!
+cores = int(os.environ.get('OMP_NUM_THREADS', 5))  # Set number of CPUs to use!
 if __name__ == '__main__':
     os.environ["MKL_NUM_THREADS"] = "%s" % cores
     os.environ["NUMEXPR_NUM_THREADS"] = "%s" % cores
@@ -13,8 +13,18 @@ from preprocessing import pipelines,PDB_processing,sequence_utils,PDBio
 from utilities import wrappers, chimera
 import numpy as np
 import argparse
+import json
+import re
+from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version as package_version
 from keras.models import Model
 from utilities.paths import structures_folder,MSA_folder,predictions_folder,path2hhblits,path2sequence_database,model_folder
+
+try:
+    __version__ = package_version('scan-net')
+except PackageNotFoundError:  # Running from a source checkout.
+    __version__ = 'unknown'
+
 
 
 pipeline_MSA = pipelines.ScanNetPipeline(
@@ -89,6 +99,77 @@ def write_predictions(csv_file, residue_ids, sequence, interface_prediction):
                 string += ','.join(['%.3f'%value for value in interface_prediction[i]])
             f.write(string + '\n')
     return
+
+
+def track_description(model_name, layer):
+    """Identifier, label and scale of a residue score track (see
+    af-molstar-viewer docs/residue-score-track.md).
+
+    None for an output whose meaningful range is not known; the scale of a
+    track must be the range of the quantity, not of the values at hand, or
+    two predictions stop being comparable.
+    """
+    name = model_name.replace('ScanNet_', '').replace('_', ' ')
+    if layer is None:
+        label = 'ScanNet %s binding site probability' % name
+        scale = {'kind': 'sequential', 'domain': [0.0, 1.0]}
+    elif layer == 'attention_layer':
+        label = 'ScanNet %s node attention' % name
+        # Same meaningful range as the Chimera annotation of node importances.
+        scale = {'kind': 'sequential', 'domain': [0.5, 2.5]}
+    else:
+        return None
+    track_id = re.sub('[^a-z0-9]+', '-', label.lower()).strip('-')
+    return track_id, label, scale
+
+
+def write_json_predictions(json_file, residue_ids, icodes, prediction, track_id,
+                           label, scale, provenance):
+    """Write predictions as residue score tracks (schema_version 1).
+
+    The format keys residues on (chain, seq, ins_code) only, so a structure
+    with several models (a biological assembly) gets one file per model.
+    """
+    models = [residue_id[0] for residue_id in residue_ids]
+    unique_models = sorted(set(models))
+    written_files = []
+    for model in unique_models:
+        values = []
+        seen = set()
+        for i, residue_id in enumerate(residue_ids):
+            if residue_id[0] != model:
+                continue
+            value = {'chain': str(residue_id[1]), 'seq': int(residue_id[2])}
+            ins_code = icodes[i].strip() if icodes is not None else ''
+            if ins_code:
+                value['ins_code'] = ins_code
+            key = (value['chain'], value['seq'], ins_code)
+            if key in seen:
+                raise ValueError('Residue (chain %s, seq %s, ins_code %r) of model %s is scored twice' % (key + (model,)))
+            seen.add(key)
+            value['value'] = round(float(prediction[i]), 3)
+            values.append(value)
+
+        if len(unique_models) > 1:
+            output_file = json_file[:-len('.json')] + '_model%s.json' % model
+            output_id = '%s-model-%s' % (track_id, model)
+            output_label = '%s (model %s)' % (label, model)
+        else:
+            output_file, output_id, output_label = json_file, track_id, label
+
+        with open(output_file, 'w') as f:
+            json.dump({
+                'schema_version': 1,
+                'id': output_id,
+                'label': output_label,
+                # Biopython reports auth_seq_id/auth_asym_id for both PDB and mmCIF.
+                'index': 'auth',
+                'scale': scale,
+                'provenance': provenance,
+                'values': values,
+            }, f, indent=2)
+        written_files.append(output_file)
+    return written_files
 
 
 def predict_interface_residues(
@@ -452,7 +533,7 @@ def predict_interface_residues(
                  for model_obj in model_objs[1:]:
                      predictions = model_obj.predict(inputs, batch_size=1,return_all=return_all)
                      query_predictions = [prediction1 + prediction2 for prediction1,prediction2 in zip(query_predictions,predictions)]
-                 query_predictions = np.array([prediction/len(model_objs) for prediction in query_predictions])
+                 query_predictions = wrappers.stack_or_object_array([prediction/len(model_objs) for prediction in query_predictions])
             else:
                 query_predictions = [model_obj.predict(inputs, batch_size=1,return_all=return_all) for model_obj in model_objs]
         else:
@@ -495,7 +576,7 @@ def predict_interface_residues(
                         -1)  # Attention coefficient has size [N_aa,K_graph,nheads]. average over heads.
                     # aggregated_attention_coeff[neighborhood_graph[s]] += np.abs(attention_coeff[s][:len(neighborhood_graph[s])]).mean(1)  # Attention coefficient has size [N_aa,K_graph,nheads]. average over heads.
                 aggregated_attention_coeffs.append(aggregated_attention_coeff)
-            aggregated_attention_coeffs = np.array(aggregated_attention_coeffs)
+            aggregated_attention_coeffs = wrappers.stack_or_object_array(aggregated_attention_coeffs)
             if layer == 'attention_layer':
                 query_predictions = aggregated_attention_coeffs
             else:
@@ -513,7 +594,7 @@ def predict_interface_residues(
                      for model_obj in model_objs[1:]:
                          predictions_ = model_obj.predict(inputs, batch_size=1,return_all=return_all)
                          predictions = [prediction1 + prediction2 for prediction1,prediction2 in zip(predictions,predictions_)]
-                     predictions = np.array([prediction/len(model_objs) for prediction in predictions])
+                     predictions = wrappers.stack_or_object_array([prediction/len(model_objs) for prediction in predictions])
                 else:
                     predictions = [model_obj.predict(inputs, batch_size=1,return_all=return_all) for model_obj in model_objs]
             else:
@@ -556,7 +637,7 @@ def predict_interface_residues(
                         aggregated_attention_coeff[neighborhood_graph[s]] += np.maximum(sign*attention_coeff[s][:len(neighborhood_graph[s])],0).mean(-1) # Attention coefficient has size [N_aa,K_graph,nheads]. average over heads.
                         # aggregated_attention_coeff[neighborhood_graph[s]] += np.abs(attention_coeff[s][:len(neighborhood_graph[s])] ).mean(-1)  # Attention coefficient has size [N_aa,K_graph,nheads]. average over heads.
                     aggregated_attention_coeffs.append(aggregated_attention_coeff)
-                aggregated_attention_coeffs = np.array(aggregated_attention_coeffs)
+                aggregated_attention_coeffs = wrappers.stack_or_object_array(aggregated_attention_coeffs)
                 if layer == 'attention_layer':
                     predictions = aggregated_attention_coeffs
                 else:
@@ -610,6 +691,21 @@ def predict_interface_residues(
             if not os.path.isdir(query_output_folder):
                 os.mkdir(query_output_folder)
 
+            chain_objs = query_chain_objs[i]
+            icodes = PDB_processing.get_PDB_icodes(chain_objs) if chain_objs is not None else None
+            provenance = {
+                'tool': 'ScanNet',
+                'tool_version': __version__,
+                'created': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                'source_structure': os.path.basename(pdb_file_locations[i]),
+                'parameters': {
+                    'model': model_name,
+                    'use_MSA': use_MSA,
+                    'assembly': assembly,
+                    'biounit': biounit,
+                },
+            }
+
 
 
             if ((isinstance(layer, list)) | (isinstance(layer, tuple)) | (not aggregate_models)):
@@ -617,13 +713,18 @@ def predict_interface_residues(
                     if layer_ is None:
                         prediction = prediction[:,1]
                         csv_file = query_output_folder + 'predictions_' + query_name + '.csv'
+                        json_file = query_output_folder + 'predictions_' + query_name + '.json'
                         chimera_file = query_output_folder + 'chimera_' + query_names[i]
                         annotated_pdb_file = query_output_folder + 'annotated_' + query_names[i] + ('.cif' if file_is_cif else '.pdb')
                     else:
                         csv_file = query_output_folder + 'activity_%s_'%layer_ + query_name + '.csv'
+                        json_file = query_output_folder + 'activity_%s_'%layer_ + query_name + '.json'
                         chimera_file = query_output_folder + 'chimera_%s'%layer_ + query_names[i]
                         annotated_pdb_file = query_output_folder + 'annotated_%s'%layer_ + query_names[i] + ('.cif' if file_is_cif else '.pdb')
                     write_predictions(csv_file, res_ids,sequence, prediction)
+                    description = track_description(model_name, layer_) if prediction.ndim == 1 else None
+                    if description is not None:
+                        write_json_predictions(json_file, res_ids, icodes, prediction, *description, provenance)
                     if predict_from_pdb & (prediction.ndim == 1):
                         if output_chimera == 'script':
                             chimera.show_binding_sites(
@@ -639,13 +740,18 @@ def predict_interface_residues(
             else:
                 if layer is None:
                     csv_file = query_output_folder + 'predictions_' + query_name + '.csv'
+                    json_file = query_output_folder + 'predictions_' + query_name + '.json'
                     chimera_file = query_output_folder + 'chimera_' + query_names[i]
                     annotated_pdb_file = query_output_folder + 'annotated_' + query_names[i] + ('.cif' if file_is_cif else '.pdb')
                 else:
                     csv_file = query_output_folder + 'activity_%s_' % layer + query_name + '.csv'
+                    json_file = query_output_folder + 'activity_%s_' % layer + query_name + '.json'
                     chimera_file = query_output_folder + 'chimera_%s' % layer + query_names[i]
                     annotated_pdb_file = query_output_folder + 'annotated_%s' % layer + query_names[i] + ('.cif' if file_is_cif else '.pdb')
                 write_predictions(csv_file, res_ids, sequence, predictions)
+                description = track_description(model_name, layer) if predictions.ndim == 1 else None
+                if description is not None:
+                    write_json_predictions(json_file, res_ids, icodes, predictions, *description, provenance)
                 if predict_from_pdb & (predictions.ndim == 1):
                     if output_chimera == 'script':
                         chimera.show_binding_sites(
@@ -675,7 +781,7 @@ def predict_interface_residues(
 
 
 
-if __name__ == '__main__':
+def main():
 
     parser = argparse.ArgumentParser(description='Predict binding sites in PDB files using Geometric Neural Network')
 
@@ -736,8 +842,6 @@ if __name__ == '__main__':
     else:
         query_names = None
         
-    predictions_folder = args.predictions_folder
-
     if args.use_MSA:
         pipeline = pipeline_MSA
     else:
@@ -815,7 +919,7 @@ if __name__ == '__main__':
         model_name=model_name,
         model_folder=model_folder,
         structures_folder=structures_folder,
-        predictions_folder=predictions_folder,
+        predictions_folder=args.predictions_folder,
         MSA_folder=MSA_folder,
         biounit=args.biounit,
         assembly=args.assembly,
@@ -825,3 +929,7 @@ if __name__ == '__main__':
         chimera_thresholds=chimera_thresholds,
         layer=layer
     )
+
+
+if __name__ == '__main__':
+    main()

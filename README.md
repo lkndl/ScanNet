@@ -47,6 +47,12 @@ pip install tensorflow-gpu==1.14
 
  
  
+With uv (https://docs.astral.sh/uv/), which resolves and installs everything from pyproject.toml:
+```
+uv sync
+```
+This also installs the `scan-net` command, so that `uv run scan-net <arguments>` is equivalent to `python predict_bindingsites.py <arguments>` and works from any directory.
+
 No other external software is necessary to run ScanNet.
 Paths to the library, MSA & structures folders are defined in utilities/paths.py
 
@@ -98,10 +104,11 @@ By default, *all* the chains are processed and *independently* from one another.
 Three types of binding sites are currently supported: Protein-protein binding sites (--mode interface, default), B-cell epitopes (--mode epitope), Protein - disordered protein binding sites (--mode idp).
 
 ## Visualizing the outputs
-Outputs are located in the predictions folder; one subfolder is created for each query. Four output files are produced:
+Outputs are located in the predictions folder; one subfolder is created for each query. Five output files are produced:
 
 - The PDB file with binding site probabilities inserted in the B-factor field
 - A .csv file with the per-residue binding site probabilities.
+- A .json file with the same probabilities as a residue score track, keyed on author chain and residue numbering, for structure viewers that colour a structure by an external track. A structure with several models yields one file per model.
 - A .cxc script for visualizing the results with ChimeraX https://www.rbvi.ucsf.edu/chimerax/ (right click -> open the file with chimeraX).
 - A .py script for visualizing the results with Chimera.
 

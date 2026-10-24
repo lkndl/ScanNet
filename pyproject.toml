@@ -1,0 +1,40 @@
+[project]
+name = "scan-net"
+version = "0.1.0"
+description = "ScanNet: geometric deep learning for protein binding site prediction"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "biopython",
+    "h5py",
+    "ipywebrtc",
+    "ipywidgets",
+    "keras",
+    "matplotlib",
+    "numba",
+    "numpy",
+    "pandas",
+    "pythreejs",
+    "scikit-learn",
+    "scipy",
+    "tensorflow",
+]
+
+[project.scripts]
+scan-net = "main:main"
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+# Flat layout: the packages sit next to the scripts at the repo root, and none
+# of them carry an __init__.py, so both lists have to be spelled out.
+[tool.setuptools]
+packages = ["network", "preprocessing", "utilities", "visualizations"]
+py-modules = [
+    "main",
+    "predict_bindingsites",
+    "predict_features",
+    "train",
+    "transfer_learning_train",
+]
