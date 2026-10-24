@@ -244,7 +244,7 @@ class grouped_Predictor_wrapper(Predictor_wrapper):
 
         order = np.argsort(Ls)[::-1]
         batches = []
-        placed = np.zeros(len(Ls),dtype=np.bool)
+        placed = np.zeros(len(Ls),dtype=bool)
 
         for k in order:
             if not placed[k]:

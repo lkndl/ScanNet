@@ -89,9 +89,9 @@ def categorize_variable(matrix, mini, maxi, n_classes):
 
 def binarize_categorical(matrix, n_classes, out=None):
     L = matrix.shape[0]
-    matrix = matrix.astype(np.int)
+    matrix = matrix.astype(int)
     if out is None:
-        out = np.zeros([L, n_classes], dtype=np.bool)
+        out = np.zeros([L, n_classes], dtype=bool)
     subset = (matrix>=0) & (matrix<n_classes)
     out[np.arange(L)[subset],matrix[subset]] = 1
     return out
@@ -298,7 +298,7 @@ class Pipeline():
                     outputs = np.array(outputs)
             else:
                 outputs = None
-            failed_samples = list(np.concatenate([np.array(batch_outputs[k][2],dtype=np.int)+k*batch_size for k in range(ncores)]))
+            failed_samples = list(np.concatenate([np.array(batch_outputs[k][2],dtype=int)+k*batch_size for k in range(ncores)]))
             return inputs,outputs,failed_samples
         else:
             inputs = []
@@ -878,7 +878,7 @@ class ScanNetPipeline(Pipeline):
             inputs += [atom_triplets,atom_attributes,atom_indices,atom_clouds]
 
         if labels is not None:
-            if labels.dtype in [np.bool,np.int]:
+            if labels.dtype in [bool,int]:
                 outputs = binarize_categorical(
                     labels, 2).astype(curr_int)
             else:

@@ -21,7 +21,7 @@ def write_labels(list_origins, list_sequences, list_resids, list_labels, output_
             L = len(sequence)
             f.write('>%s\n' % origin)
             for l in range(L):
-                if label.dtype == np.float:
+                if label.dtype == float:
                     f.write('%s %s %s %.4f\n' % (resids[l, -2], resids[l, -1], sequence[l], label[l]))
                 else:
                     f.write('%s %s %s %s\n' % (resids[l, -2], resids[l, -1], sequence[l], label[l]))
@@ -91,7 +91,7 @@ def align_labels(labels, pdb_resids,label_resids=None,format='missing'):
         if format == 'sparse': # Unaligned labels are assigned category zero.
             aligned_labels = np.zeros( [sequence_length] + list(labels.shape[1:]), dtype=labels.dtype)
         elif format == 'missing': # Unaligned labels are assigned -1/nan category (unknown label, no backpropagation).
-            if labels.dtype == np.int:
+            if labels.dtype == int:
                 aligned_labels = np.zeros( [sequence_length] + list(labels.shape[1:]), dtype=labels.dtype) -1
             else:
                 aligned_labels = np.zeros( [sequence_length] + list(labels.shape[1:]), dtype=labels.dtype) + np.nan
@@ -268,7 +268,7 @@ def build_dataset(
 
     env = {}
     for field in fields:
-        env['all_%ss'%field] = np.array(locals()['all_%ss'%field],dtype=np.object)
+        env['all_%ss'%field] = np.array(locals()['all_%ss'%field],dtype=object)
     env['all_origins'] = np.array(list_origins)
     location = pipeline_folder + dataset_name + '_raw.data'
     io_utils.save_pickle(env,location)
